@@ -17,7 +17,7 @@ WidgetScroll and table table-lists are styles of BizTalk360.
 **Example:** <br />
 To do list widget contains list of To do details designed with table and widget scroll styles.
  
-![TodolistCustomWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/TodolistCustomWidget.png)
+![TodolistCustomWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.SampleCustomWidgets/Images/TodolistCustomWidget.png)
 
 # Custom Styles
 There is possibility to write your own CSS styles like follows,
@@ -42,9 +42,9 @@ fill: rgb(51, 51, 51);
 ```
 The below widget uses custom styles for fill high chart color and align the send port’s status and Host instance status.
  
-![SendPortWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/SendPortWidget.png)
+![SendPortWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.SampleCustomWidgets/Images/SendPortWidget.png)
 
-![ArtifactsCountWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/ArtifactsCountWidget.png)
+![ArtifactsCountWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.SampleCustomWidgets/Images/ArtifactsCountWidget.png)
  
 In the below widget CSS styles are applied to the font awesome icon.
 ```
@@ -66,5 +66,5 @@ text-align:center;
 BizTalk360 uses Bootstrap v3.3.2, which is used to design CSS based design templates like forms, buttons, glyph icons etc.
 Following custom widget uses bootstrap to design the form, input fields and button.
 
-![BootstrapStyleWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/BootstrapStyleWidget.png)
+![BootstrapStyleWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.SampleCustomWidgets/Images/BootstrapStyleWidget.png)
  

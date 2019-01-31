@@ -1,7 +1,7 @@
 To help you to get started with creating Custom Widgets using BizTalk360 API, you can use below template. <br />
 The following custom widget shows web endpoint status details in BizTalk360.
 
-![WebEndpointWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/WebEndpointWidget.png)
+![WebEndpointWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.SampleCustomWidgets/Images/WebEndpointWidget.png)
 
 ```
 <html>

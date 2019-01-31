@@ -2,7 +2,7 @@
 Knockoutjs v3.3.0 is used for the data binding. The below code snippet is used to bind data for web end point status
 Following custom widget uses knockout to bind the data to the table.
 
-![WebEndpointWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/WebEndpointWidget.png)
+![WebEndpointWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.SampleCustomWidgets/Images/WebEndpointWidget.png)
 
  ```
 <!--ko if: $data.status() == -1 -->
