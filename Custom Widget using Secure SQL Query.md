@@ -1,6 +1,6 @@
 # Custom Widget using Secure SQL Query
 
-To help you get started with creating Custom Widgets, you can use below template.<br /><br />
+To help you get started with creating Custom Widgets using Secure SQL Query, you can use below template.<br /><br />
 The following custom widget shows BizTalk360 environment details. We firstly need to create the Secure SQL Query, we would like to have as a widget, in the Secure SQL Queries feature. You can find this feature under Operations and then Data Access. To create custom widget using Secure SQL Query refer [this](https://docs.biztalk360.com/docs/creating-a-custom-widget-for-executing-secure-sql-queries) article.<br /><br />
 In the below template secure SQL query is executed using POST method. Commonly payload for API call accepts only JSON data, so here payload object is converted to JSON data like follows
 
