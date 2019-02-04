@@ -17,7 +17,7 @@ WidgetScroll and table table-lists are styles of BizTalk360.
 **Example:** <br />
 To do list widget contains list of To do details designed with table and widget scroll styles.
  
-![TodolistCustomWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.SampleCustomWidgets/Images/TodolistCustomWidget.png)
+![TodolistCustomWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.CustomWidgets/Images/TodolistCustomWidget.png)
 
 # Custom Styles
 There is possibility to write your own CSS styles like follows,
