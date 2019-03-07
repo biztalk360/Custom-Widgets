@@ -1,0 +1,463 @@
+# Custom Widget for Azure Service Bus Queue Status
+
+The following custom widget shows BizTalk360 Azure Service Bus Queue details, which are mapped with Alarms. We firstly need to create the Secure SQL Query, we would like to have as a widget, in the Secure SQL Queries feature. You can find this feature under Operations and then Data Access. To create custom widget using Secure SQL Query refer [this](https://docs.biztalk360.com/docs/creating-a-custom-widget-for-executing-secure-sql-queries) article.<br /><br />
+In the below template secure SQL query is executed using POST method. Commonly payload for API call accepts only JSON data, so here payload object is converted to JSON data and binding with GOJs Graph for graphical representation.
+
+![SampleCustomTemplateWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.CustomWidgets/Images/AzureServiceBusQueuesStatus.png)
+
+```
+<div id="WidgetScroll" style="top:30px;">
+    <div class="query-builder margin-t">
+        <a data-toggle="collapse" data-bind="attr: { href: '#graph-Queues' }" class="collapse-trigger collapsed">Filters</a>
+        <div data-bind="attr: { id: 'graph-Queues' }" class="collapse">  
+            <div class="row" style="padding-top: 12px;">
+                <div class="col-md-9">
+                    <div class="form-group row">
+                        <label class="col-md-2" style="font-size: 15px;" for="alarm">Alarm</label>
+                        <div class="col-md-8">
+                            <select
+                                data-bind="kendoMultiSelect: { data:AlarmDetails,dataTextField:'AlarmName',dataValueField:'AlarmName',value:selectedAlarm}"
+                                multiple="multiple"></select>
+                        </div>
+                        <div>
+                            <button class="btn" id="select" data-bind="click:selectAllAlarms">
+                                <a data-bind="bsToolTip: { placement: 'top' }" data-container="body"
+                                    data-toggle="tooltip" data-original-title="Select All">
+                                    <i class="fa fa-check-square-o"></i>
+                                </a>
+                            </button>
+                            <button class="btn" id="deselect" data-bind="click:deSelectAllAlarms">
+                                <a data-bind="bsToolTip: { placement: 'top' }" data-container="body"
+                                    data-toggle="tooltip" data-original-title="Deselect All">
+                                    <i class="fa fa-square-o"></i>
+                                </a>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-md-2 control-label" style="font-size: 15px;" for="status">Status</label>
+                        <div class="col-md-10">
+                            <label class="swich-container">
+                                <input id="chbHighImportance" type="checkbox"
+                                    data-bind="kendoMobileSwitch: { checked: includeHealthyStatus, onLabel: 'YES', offLabel: 'NO' }" />
+                                <span class="caption">Include Healthy Alarm(s) </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary btn-medium" data-bind="click:filter" id="select"><i
+                            class="fa fa-sliders" aria-hidden="true"></i> Search
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="myDiagramDiv" style="border: solid 1px white; height: 600px"></div>
+</div>
+<script>
+    // BEGIN User variables
+    azureQueueRefresh = 20;
+    username = "BizTalk360"; // BizTalk360 service account
+    password = "Rajsree9656624199"; // Password of BizTalk360 service account
+    environmentId = "a3d01fb3-0f1b-46e5-9ec0-2dbb9a3f2513"; // BizTalk360 Environment ID  (take from SSMS or API Documentation)
+    queryId = "01a9219a-97f7-4fba-8b10-fd7e123b62bb"; // Id of the Secure SQL Query (take from SSMS)
+    queryName = "Service Bus Queue"; // Name of the Secure SQL Query as it is stored under Operations/Secure SQL Query
+    sqlInstance = "BT360DEV22"; // SQL Instance against which the SQL Query must be executed
+    database = "BizTalk360"; // Database against which the SQL Query must be executed
+    sqlQueryForGraph = "Select AA.Id,AA.[Name],AME.MonitorStatus,AME.ExecutionResult from [dbo].[b360_alert_MonitorExecution] AME Inner Join[dbo].[b360_alert_Alarm] AA ON AME.AlarmId = AA.Id and AME.MonitorGroupType = 'Queues' WHERE AME.LastExecutionTime = (SELECT MAX(LastExecutionTime) from [dbo].[b360_alert_MonitorExecution] WHERE MonitorGroupType = 'Queues' and AA.IsAlertDisabled='false' and AlarmId = AA.Id and LastExecutionTime >= DATEADD(MINUTE,-60,GETUTCDATE())) AND AME.EnvironmentId ='a3d01fb3-0f1b-46e5-9ec0-2dbb9a3f2513'"; // The SQL Query which needs to be executed from the custom Widget
+    bt360server = "localhost"; // Name of the BizTalk360 server (needed to do an API call to execute the SQL query
+    //Mention the created alarm details and the respective partner name to display in the graph.
+    AlarmDetails = [
+        { AlarmName: "Threshold Alarm-1", PartnerName: "Partner-1" },
+        { AlarmName: "Threshold Alarm-2", PartnerName: "Partner-2" },
+        { AlarmName: "Threshold Alarm-3", PartnerName: "Partner-3" },
+        { AlarmName: "Threshold Alarm-4", PartnerName: "Partner-4" }
+    ];
+    // END User variables
+    executeQueryUrlForGraph =
+        "http://" +
+        bt360server +
+        "/BizTalk360/Services.REST/BizTalkGroupService.svc/ExecuteCustomSQLQuery";
+    records = ko.observableArray();
+
+    nodeArray = [
+        {
+            key: 1,
+            name: "Azure Service Bus Queue",
+            overallStatus: "RootNode"
+        }
+    ];
+    keyValue = 1;
+    x2js = new X2JS({
+        attributePrefix: "",
+        arrayAccessForm: "property",
+        arrayAccessFormPaths: ["root.records.record"]
+    });
+    selectedAlarm = ko.observableArray();
+
+    includeHealthyStatus = ko.observable(false);
+    GetQueueMonitorStatusForGraph = function () {
+        var self = this;
+        var queueRecordDetails = [];
+        self.executeCustomSqlQueryForGraph(function (data) {
+            var results = x2js.xml_str2json(data.queryResult);
+            self.records.removeAll();
+            if (results.root.records.record != null) {
+                if (Array.isArray(results.root.records.record)) {
+                    ko.utils.arrayForEach(results.root.records.record, function (item) {
+                        queueRecordDetails.push(self.mappedQueuesData(item));
+                    });
+                    self.records(queueRecordDetails);
+                } else {
+                    self.records(self.mappedQueuesData(results.root.records.record));
+                }
+                self.GraphData(self.records());
+                self.myDiagram.div = null;
+                self.displayGraph();
+            }
+        });
+    };
+    mappedQueuesData = function (data) {
+        var result = x2js.xml_str2json(data.ExecutionResult);
+        delete data.MonitorStatus;
+        data.Issues = [];
+        data.userAlarm = {
+            alarmId: data.Id,
+            name: data.Name
+        };
+        data.monitorStatus =
+            result.MonitorGroupData.monitorGroups.MonitorGroup.monitors.Monitor[1].monitorStatus;
+        if (
+            result.MonitorGroupData.monitorGroups.MonitorGroup.monitors
+                .Monitor[1].monitorStatus != "NotConfigured" && result.MonitorGroupData.monitorGroups.MonitorGroup.monitors
+                    .Monitor[1].issues != undefined
+        ) {
+            if (
+                Array.isArray(
+                    result.MonitorGroupData.monitorGroups.MonitorGroup.monitors
+                        .Monitor[1].issues.Issue
+                )
+            ) {
+                var issueDescription = [];
+                ko.utils.arrayForEach(
+                    result.MonitorGroupData.monitorGroups.MonitorGroup.monitors
+                        .Monitor[1].issues.Issue,
+                    function (item) {
+                        issueDescription.push(item.description);
+                    }
+                );
+                data.Issues = issueDescription;
+            } else {
+                if (
+                    result.MonitorGroupData.monitorGroups.MonitorGroup.monitors
+                        .Monitor[1].issues.Issue != undefined
+                ) {
+                    data.Issues = new Array(
+                        result.MonitorGroupData.monitorGroups.MonitorGroup.monitors.Monitor[1].issues.Issue.description
+                    );
+                }
+            }
+        }
+        return data;
+    };
+    executeCustomSqlQueryForGraph = function (callback) {
+        var self = this;
+        $.ajax({
+            dataType: "json",
+            url: self.executeQueryUrlForGraph,
+            type: "POST",
+            contentType: "application/json",
+            username: self.username,
+            password: self.password,
+            data:
+                '{"context":{"environmentSettings":{"id":"' +
+                self.environmentId +
+                '","licenseEdition":0},"callerReference":"REST-SAMPLE"},"query":{"id":"' +
+                self.queryId +
+                '","name":"' +
+                self.queryName +
+                '","sqlInstance":"' +
+                self.sqlInstance +
+                '","database":"' +
+                self.database +
+                '","sqlQuery":"' +
+                self.sqlQueryForGraph +
+                '","isGlobal":false}}',
+            cache: false,
+            success: function (data) {
+                callback(data);
+            },
+            error: function (xhr, ajaxOptions, thrownError) {
+                alert(xhr.status);
+                alert(xhr.responseText);
+            }
+        });
+    };
+    GraphData = function (queueData) {
+        var self = this;
+        var data = [];
+        self.nodeArray = [{
+            key: 1,
+            name: "Azure Service Bus Queue",
+            overallStatus: "RootNode"
+        }];
+        if (self.selectedAlarm().length != 0) {
+            ko.utils.arrayForEach(self.selectedAlarm(), function (item) {
+                var item = _.findWhere(queueData, {
+                    Name: item
+                });
+                if (item != undefined) {
+                    data.push(item);
+                }
+            });
+        } else {
+            data = queueData;
+        }
+        for (var i = 0; i < data.length; i++) {
+            var node;
+            if (data[i] != undefined) {
+                if (data[i].monitorStatus == "Healthy") {
+                    if (self.includeHealthyStatus()) {
+                        var partnerDetail = _.findWhere(self.AlarmDetails, {
+                            AlarmName: data[i].Name
+                        });
+                        node = self.parentNode(
+                            partnerDetail.PartnerName,
+                            data[i].monitorStatus,
+                            data[i].Id,
+                            data[i].Name
+                        );
+                    }
+                } else {
+                    var partnerDetail = _.findWhere(self.AlarmDetails, {
+                        AlarmName: data[i].Name
+                    });
+                    node = self.parentNode(
+                        partnerDetail.PartnerName,
+                        data[i].monitorStatus,
+                        data[i].Id,
+                        data[i].Name
+                    );
+                    if (data[i].Issues.length > 0) {
+                        node = self.childNode(
+                            data[i].Issues,
+                            data[i].monitorStatus
+                        );
+                    }
+                }
+            }
+
+        }
+    };
+    parentNode = function (value, status, alarmId, alarmName) {
+        var self = this;
+        var node = {
+            key: ++self.keyValue,
+            name: value,
+            alarmName: alarmName,
+            overallStatus: status,
+            alarmId: alarmId,
+            parent: 1
+        };
+        self.nodeArray.push(node);
+    };
+    childNode = function (value, status) {
+        var self = this;
+        var node = {
+            key: ++self.keyValue,
+            items: value,
+            overallStatus: status,
+            parent: self.keyValue - 1
+        };
+        self.nodeArray.push(node);
+    };
+    GraphInit = function () {
+        var self = this;
+        //if (window.goSamples) goSamples(); // init for these samples -- you don't need to call this
+        var $ = go.GraphObject.make; // for conciseness in defining templates
+        self.myDiagram = $(go.Diagram, "myDiagramDiv", {
+            // make sure users can only create trees
+            "animationManager.isEnabled": false,
+            validCycle: go.Diagram.CycleDestinationTree,
+            // users can select only one part at a time
+            maxSelectionCount: 0,
+            // mouse wheel zooms instead of scrolls
+            "toolManager.mouseWheelBehavior": go.ToolManager.WheelZoom,
+            layout: $(go.TreeLayout, {
+                treeStyle: go.TreeLayout.StyleLastParents,
+                arrangement: go.TreeLayout.ArrangementHorizontal,
+                // properties for most of the tree:
+                angle: 90,
+                layerSpacing: 35,
+                // properties for the "last parents":
+                alternateAngle: 90,
+                alternateLayerSpacing: 35,
+                alternateNodeSpacing: 20,
+                alternateAlignment: go.TreeLayout.AlignmentBus
+            })
+        });
+        self.myDiagram.addDiagramListener("InitialLayoutCompleted", function (e) {
+        });
+        self.myDiagram.nodeTemplate = $(go.Node, "Vertical", new go.Binding("text", "name"),
+            $(go.Panel, "Auto",
+                $(go.Shape, "RoundedRectangle", {
+                    fill: 'gray',
+                    stroke: null,
+                    cursor: "pointer"
+                }, new go.Binding("fill", "overallStatus", function (v) {
+                    if (v == "Critical") return "rgb(231, 76, 60)";
+                    if (v == "Warning") return "rgb(241, 196, 15)";
+                    if (v == "Monitor Error") return "rgb(64,64,64)";
+                    if (v == "RootNode") return "#2672EC";
+                    if (v == "Healthy") return "rgb(39, 174, 96)";
+                })
+                ),
+                $(go.Panel, "Vertical", new go.Binding("itemArray", "items"),
+                    {
+                        itemTemplate: $(
+                            go.Panel,
+                            "Auto",
+                            { margin: 1 },
+                            $(go.TextBlock, new go.Binding("text", ""), {
+                                font: "9.5pt sans-serif",
+                                background: "rgb(237, 239, 242)",
+                                overflow: go.TextBlock.OverflowEllipsis,
+                                maxLines: 3,
+                                width: 200
+                            })
+                        )
+                    }
+                ),
+                $(go.Panel, "Horizontal",
+                    $(go.Shape,
+                        {
+                            geometryStretch: go.GraphObject.Uniform,
+                            fill: "white", strokeWidth: 0, height: 30,
+                            margin: new go.Margin(6, 8, 6, 10),
+                        }, new go.Binding("", "", function (properties, node) {
+                            var value = go.Geometry.fillPath("M384 1184v64q0 13-9.5 22.5t-22.5 9.5h-64q-13 0-22.5-9.5t-9.5-22.5v-64q0-13 9.5-22.5t22.5-9.5h64q13 0 22.5 9.5t9.5 22.5zm0-256v64q0 13-9.5 22.5t-22.5 9.5h-64q-13 0-22.5-9.5t-9.5-22.5v-64q0-13 9.5-22.5t22.5-9.5h64q13 0 22.5 9.5t9.5 22.5zm0-256v64q0 13-9.5 22.5t-22.5 9.5h-64q-13 0-22.5-9.5t-9.5-22.5v-64q0-13 9.5-22.5t22.5-9.5h64q13 0 22.5 9.5t9.5 22.5zm1152 512v64q0 13-9.5 22.5t-22.5 9.5h-960q-13 0-22.5-9.5t-9.5-22.5v-64q0-13 9.5-22.5t22.5-9.5h960q13 0 22.5 9.5t9.5 22.5zm0-256v64q0 13-9.5 22.5t-22.5 9.5h-960q-13 0-22.5-9.5t-9.5-22.5v-64q0-13 9.5-22.5t22.5-9.5h960q13 0 22.5 9.5t9.5 22.5zm0-256v64q0 13-9.5 22.5t-22.5 9.5h-960q-13 0-22.5-9.5t-9.5-22.5v-64q0-13 9.5-22.5t22.5-9.5h960q13 0 22.5 9.5t9.5 22.5zm128 704v-832q0-13-9.5-22.5t-22.5-9.5h-1472q-13 0-22.5 9.5t-9.5 22.5v832q0 13 9.5 22.5t22.5 9.5h1472q13 0 22.5-9.5t9.5-22.5zm128-1088v1088q0 66-47 113t-113 47h-1472q-66 0-113-47t-47-113v-1088q0-66 47-113t113-47h1472q66 0 113 47t47 113z");
+                            if (value === null) {
+                                node.visible = false;
+                            }
+                            else {
+                                node.geometryString = value;
+                                node.visible = false;
+                            }
+                        })),
+                    $(go.Panel, "Table", {
+                        maxSize: new go.Size(150, 999),
+                        margin: new go.Margin(3, 3, 0, 3),
+                        defaultAlignment: go.Spot.Left
+                    }, $(go.RowColumnDefinition, {
+                        column: 2,
+                        width: 4
+                    }), $(go.TextBlock, {
+                        name: 'LablePart',
+                        row: 0,
+                        column: 0,
+                        columnSpan: 5,
+                        editable: false,
+                        isMultiline: false,
+                        stroke: "white",
+                        minSize: new go.Size(10, 14),
+                        cursor: "pointer"
+                    }, new go.Binding("text", "name").makeTwoWay(), {
+                            click: function (e, obj) {
+                                self.redirectToPath(obj.part.data);
+                            },
+                            mouseEnter: function (e, obj, prev) {
+                                var shape = obj.part.findObject("LablePart");
+                                if (shape)
+                                    shape.isUnderline = true;
+                            },
+                            mouseLeave: function (e, obj, next) {
+                                var shape = obj.part.findObject("LablePart");
+                                if (shape)
+                                    shape.isUnderline = false;
+                            }
+                        }))
+                )//End of Horizontal Panel
+            ),//end of Auto Panel
+            $(go.Panel, { height: 15 },
+                $("TreeExpanderButton"),
+                {
+                    width: 14,
+                    "ButtonIcon.stroke": "white",
+                    "ButtonBorder.fill": "darkblue",
+                    "ButtonBorder.stroke": "transparent",
+                    "_buttonFillOver": "darkred",
+                    "_buttonStrokeOver": "red",
+                }, new go.Binding("visible", "", function (properties) {
+                })
+            )
+        );
+        self.myDiagram.linkTemplate = $(go.Link, {
+            routing: go.Link.Orthogonal,  // may be either Orthogonal or AvoidsNodes
+            corner: 5,
+            relinkableFrom: false,
+            relinkableTo: false
+        }, $(go.Shape, {
+            strokeWidth: 3,
+            stroke: "#00a4a4"
+        }));
+    };
+    redirectToPath = function (node) {
+        var config = require("biztalk360/framework/core/config");
+        var router = require("plugins/router");
+        if (node.alarmId != undefined && node.alarmId != '') {
+            alarm = {
+                alarmId: ko.observable(node.alarmId),
+                name: node.alarmName
+            };
+            config.currentAlarm(alarm);
+        }
+        router.navigate('#/queues/AzureServiceBusQueues', true);
+    };
+    displayGraph = function () {
+        var self = this;
+        var data = {
+            class: "go.TreeModel",
+            nodeDataArray: self.nodeArray
+        };
+        self.myDiagram.div = null;
+        self.GraphInit();
+        self.myDiagram.model = go.Model.fromJson(data);
+        self.myDiagram.findTreeRoots().each(function (n) { n.collapseTree(2); });
+
+    };
+    filter = function () {
+        var selectedAlarmData = [];
+        if (selectedAlarm().length != 0) {
+            ko.utils.arrayForEach(selectedAlarm(), function (item) {
+                var item = _.findWhere(records(), {
+                    Name: item
+                });
+                if (item != undefined) {
+                    selectedAlarmData.push(item);
+                }
+            });
+            GraphData(selectedAlarmData);
+            myDiagram.div = null;
+            displayGraph();
+        } else {
+            GraphData(records());
+            myDiagram.div = null;
+            displayGraph();
+        }
+
+    };
+    selectAllAlarms = function () {
+        selectedAlarm.removeAll();
+        ko.utils.arrayForEach(AlarmDetails, function (item) {
+            selectedAlarm.push(item.AlarmName);
+        });
+    };
+    deSelectAllAlarms = function () {
+        selectedAlarm.removeAll();
+    };
+    GetQueueMonitorStatusForGraph();
+    GraphInit();
+    setInterval(GetQueueMonitorStatusForGraph, azureQueueRefresh * 1000);
+</script>
+```
