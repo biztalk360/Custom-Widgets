@@ -1,6 +1,6 @@
 # Custom Widget for Azure Service Bus Queue Status
 
-The following custom widget shows how to use any kind of data in solid guage in BizTalk360.you can use below template for graphical representation <br />
+The following custom widget shows how to use any kind of data in solid guage in BizTalk360. You can use below template for graphical representation <br />
 
 ![SampleCustomTemplateWidget](https://github.com/biztalk360/Custom-Widgets/blob/master/Kovai.BizTalk360.CustomWidgets/Images/SolidGauge.png)
 
